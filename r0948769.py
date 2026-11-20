@@ -6,7 +6,7 @@ import numba
 from numba import jit
 
 
-@jit((numba.int32, numba.float32)(numba.float32[:], numba.float32[:,:]))
+@jit()
 def fitness(individual, distanceMatrix):
 	n = individual.shape[0]
 	if n == 0:
@@ -20,7 +20,78 @@ def fitness(individual, distanceMatrix):
 			distance += distanceMatrix[a, b]
 		else:
 			infinities += 1
+	# the return statement might not be supported by Numba
 	return np.array([infinities, distance])
+
+@jit(numba.float32[:,:](numba.float32[:], numba.float32[:]))
+def adjacencySet(parent1, parent2, numCities):
+	adjSet = np.zeros(numCities)
+	idx = 0
+	for city in parent1:
+		numNeighbors = 4
+		idxP2 = np.argsort(parent2)[city]
+
+		n1 = parent1[idx-1]
+		n2 = parent1[idx+1]
+		n3 = parent2[idxP2-1]
+		n4 = parent2[idxP2+1]
+
+		# edges present in both parents are a multiple of pi
+		if n1 == n3:
+			numNeighbors -= 1
+			n1 = n1*np.pi
+			n3 = -1
+		elif n1 == n4:
+			numNeighbors -= 1
+			n1 = n1*np.pi
+			n4 = -1
+
+		if n2 == n3:
+			numNeighbors -= 1
+			n2 = n2*np.pi
+			n3 = -1
+		elif n2 == n4:
+			numNeighbors -= 1
+			n2 = n2 * np.pi
+			n4 = -1
+
+		possibleNeighbors = np.array((n1, n2, n3, n4))
+
+		neighbors = np.zeroes(numNeighbors)
+		for i in range(possibleNeighbors.shape[0]):
+			if possibleNeighbors[i] != -1:
+				neighbors[i] = possibleNeighbors[i]
+
+		adjSet[city] = neighbors
+		idx += 1
+
+		return adjSet
+
+		# Adjacency set with directed feasibility controls
+		# if distanceMatrix[n1, city] != np.inf:
+		# 	neighborsCity[0] = n1
+		#
+		# if distanceMatrix[city, parent1[idx + 1]] != np.inf:
+		# 	neighborsCity[1] = parent1[idx + 1]
+		#
+		# if distanceMatrix[parent2[idxP2 - 1], city] != np.inf:
+		# 	neighborsCity[2] = parent2[idxP2 - 1]
+		# 	if
+		#
+		# if distanceMatrix[city, parent2[idxP2 + 1]] != np.inf:
+		# 	neighborsCity[3] = parent2[idxP2 + 1]
+
+
+@jit(numba.int16[:,:](numba.int16[:,:], numba.int16))
+# changing the city to a negative value constitutes removing that city
+def removeCity(adjacencySet, city):
+	adjacencySet[city] = -1 * adjacencySet[city] - 1
+	for neighbors in adjacencySet:
+		for i in neighbors:
+			if i == city:
+				i = -1
+	return adjacencySet
+
 
 # Modify the class name to match your student number.
 class r0948769:
@@ -62,41 +133,67 @@ class r0948769:
 		# idea is to implement edge recombination, like group 27
 		# in the return statement we already merge offspring with population
 		def recombination(population, parents):
-			offspring = np.zeros(len(parents)//2)
-			child = np.zeros(numCities)
-			for i in range(numCities):
-				if rng.random() <= 0.5:
-					child[i] = parents[0, i]
-				else:
-					child[i] = parents[1, i]
+			offspring = np.zeros(parents.shape[0]//2)
+			idxParents = parents.shape[0]-1
+
+			if parents.shape[0]%2 != 0:
+				parents = np.concatenate((population[rng.integers(low=0, high=self.popNum, size=1)], parents))
+			while idxParents >= 1:
+				p1 = parents[idxParents]
+				p2 = parents[idxParents-1]
+				adjSet = adjacencySet(p1, p2, numCities)
+
+				child = np.zeros(numCities)
+				child[0] = p1[0]
+
+
+
+				idxParents -= 2
 
 			popAndOff = np.concatenate((population, offspring), axis=0)
 			return popAndOff
 
-		# Portfolio of mutations just like in our group project
-		def mutation(population):
-			if rng.random() < self.mutProb:
-				rndmDummy = rng.random()
-				if rndmDummy < 0.65:
-					# mutation 1
-					pass
-				elif 0.65 <= rndmDummy < 0.85:
-					# mutation 2
-					pass
-				else:
-					# mutation 3
-					pass
+		def chooseNextEdge(adjacencySet, possibleEdges):
+			for i in possibleEdges:
+
+				if i%np.pi == 0:
+					return i
+				elif
+
+			return chooseNextEdge(adjacencySet, )
+			return 0
+
+		def mutation(popAndOff):
+			idx = popAndOff.shape[0]-1
+			while idx >= 0:
+				if rng.random() < self.mutProb:
+					mutate = popAndOff[idx]
+					rndmDummy = rng.random()
+					if rndmDummy < 0.65:
+						# mutation 1
+
+						pass
+					elif 0.65 <= rndmDummy < 0.85:
+						# mutation 2
+
+						pass
+					else:
+						# mutation 3
+
+						pass
+				idx -= 1
 			return 0
 
 		def elimination(popAndOff):
-			fitInfs = np.zeros(len(popAndOff))
-			fitVals = np.zeros(len(popAndOff))
-			for idx in range(len(popAndOff)):
+			fitInfs = np.zeros(popAndOff.shape[0])
+			fitVals = np.zeros(popAndOff.shape[0])
+			for idx in range(popAndOff.shape[0]):
 				fitInfs[idx] = fitness(popAndOff[idx])[0]
 				fitVals[idx] = fitness(popAndOff[idx])[1]
 
 			idxSorted = np.lexsort((fitVals, fitInfs))
-			survivors = np.delete(popAndOff, idxSorted[:-len(popAndOff)-self.popNum])
+			numOffspring = popAndOff.shape[0]-self.popNum
+			survivors = np.delete(popAndOff, idxSorted[:-numOffspring])
 			return survivors
 
 		# Your code here.
